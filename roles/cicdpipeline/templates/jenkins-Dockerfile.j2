@@ -1,0 +1,40 @@
+# STAGE 1: Build the Jenkins LTS WAR
+FROM maven:{{ maven_version }} AS builder
+
+ARG JENKINS_VERSION={{ jenkins_version }}
+
+WORKDIR /build
+RUN git clone --depth 1 --branch ${JENKINS_VERSION} https://github.com/jenkinsci/jenkins.git .
+
+# Build the WAR (skipping tests for speed)
+RUN mvn clean install -pl war -am -DskipTests
+
+# STAGE 2: Runtime Environment
+FROM eclipse-temurin:{{ eclipse_temurin_version }}
+
+ENV JENKINS_HOME=/var/jenkins_home
+RUN mkdir -p /var/jenkins_home \
+    && useradd -d /var/jenkins_home -u 1002 -m -s /bin/bash jenkins \
+    && chown -R jenkins:jenkins /var/jenkins_home
+
+COPY --from=builder /build/war/target/jenkins.war /usr/share/jenkins/jenkins.war
+
+ARG STOREPASS="{{ ssl_client_p12_password }}"
+ARG STOREALIAS="{{ ssl_client_p12_alias }}"
+
+USER root
+COPY ca.crt /usr/local/share/ca-certificates/${STOREALIAS}-ca.crt
+RUN update-ca-certificates
+
+RUN keytool -import -trustcacerts \
+    -keystore $JAVA_HOME/lib/security/cacerts \
+    -storepass ${STOREPASS} \
+    -noprompt \
+    -alias ${STOREALIAS} \
+    -file /usr/local/share/ca-certificates/${STOREALIAS}-ca.crt
+
+USER jenkins
+WORKDIR $JENKINS_HOME
+EXPOSE 8080 50000
+
+ENTRYPOINT ["java", "-jar", "/usr/share/jenkins/jenkins.war", "--prefix=/jenkins"]

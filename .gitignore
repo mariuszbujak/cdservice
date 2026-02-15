@@ -1,0 +1,9 @@
+.DS_Store
+*/.DS_Store
+ansible.cfg
+inventory/hosts
+roles/cicdpipeline/vars/secrets.yml
+roles/cicdpipeline/vars/certs.yml
+roles/cicdpipeline/vars/main.yml
+roles/cicdpipeline/vars/.vpass.yml
+roles/cicdpipeline/files/client.p12

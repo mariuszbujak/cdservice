@@ -1,0 +1,50 @@
+- name: Execute CA Setup and Cleanup
+  hosts: localhost
+  vars_files:
+    - ../vars/secrets.yml
+    - ../vars/main.yml
+    - ../vars/.vpass.yml
+  vars:
+    remote_vault_pass: "{{ vault_secret_key_var }}"
+  tasks:
+    - name: Handle Script Execution
+      block:
+        - name: Create a temporary vault password file
+          copy:
+            content: "{{ remote_vault_pass }}"
+            dest: /tmp/.vpass
+            mode: '0400' # Read-only for the owner
+
+        - name: Render the bash script
+          template:
+            src: ../templates/setup-ca.sh.j2
+            dest: /tmp/setup-ca.sh
+            mode: '0700'
+
+        - name: Execute the script
+          command: /tmp/setup-ca.sh
+          
+        - name: Fetch the encrypted file back to the control node
+          fetch:
+            src: "{{ item.remote_path }}"
+            dest: "{{ item.local_path }}"
+            flat: yes
+          loop:
+            - { remote_path: '/tmp/certs.yml', local_path: '../vars/certs.yml' } 
+            - { remote_path: '/tmp/client.p12', local_path: '../files/client.p12' }             
+
+        - name: Remove the temporary transfer file
+          file:
+            path: "{{ item }}"
+            state: absent  
+          loop:
+            - /tmp/certs.yml
+            - /tmp/client.p12
+          
+      always:
+        - name: Shred and remove sensitive files
+          shell: |
+            rm -f /tmp/.vpass
+            rm -f /tmp/setup-ca.sh
+          args:
+            removes: /tmp/.vpass

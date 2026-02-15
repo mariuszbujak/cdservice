@@ -1,0 +1,47 @@
+- name: Build Jenkins Docker Image and Start Service
+  hosts: test
+  become: true
+  vars:
+    ansible_user: "{{ lookup('ansible.builtin.config', 'DEFAULT_REMOTE_USER') }}"
+    jenkins_src_dir: "/tmp/{{ ansible_user }}/{{ project_name }}/jenkins/"
+    docker_image_name: "{{ project_name }}-jenkins:{{ jenkins_version }}"
+    docker_image_tag: "{{ jenkins_version }}"
+  vars_files:
+    - "../vars/secrets.yml"
+    - "../vars/certs.yml"
+    - "../vars/main.yml"
+  tasks:
+    - name: Ensure host install directory exists
+      ansible.builtin.file:
+        path: "{{ jenkins_src_dir }}"
+        state: directory
+        mode: '0755'
+      become_user: "{{ ansible_user }}"
+
+    - name: ca_crt
+      ansible.builtin.copy:
+        content: "{{ ca_crt }}"
+        dest: "{{ jenkins_src_dir }}ca.crt"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0640'  
+
+    - name: Create Dockerfile
+      template:
+        src: ../templates/jenkins-Dockerfile.j2
+        dest: "{{ jenkins_src_dir }}/Dockerfile"
+      become_user: "{{ ansible_user }}"
+
+    - name: Build jenkins "{{ jenkins_version }}" Image
+      community.docker.docker_image:
+        name: "{{ docker_image_name }}"
+        tag: "{{ docker_image_tag }}"
+        build:
+          path: "{{ jenkins_src_dir }}"
+          dockerfile: Dockerfile
+        source: build
+
+    - name: Removal of Jenkins source folder
+      ansible.builtin.file:
+        path: "{{ jenkins_src_dir }}"
+        state: absent

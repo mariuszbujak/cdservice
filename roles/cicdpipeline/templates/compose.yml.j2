@@ -1,0 +1,84 @@
+services:
+  proxy: 
+    image: {{ project_name }}-proxy:{{ nginx_version }}
+    ports:
+      - "443:443"
+      - "80:80"
+    hostname: "proxy"
+    container_name: "proxy"
+    depends_on:
+      - "keycloak"
+
+  jenkins:
+    image: {{ project_name }}-jenkins:{{ jenkins_version }}
+    restart: always
+    ports:
+      - "8081:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_data:/var/jenkins_home
+    hostname: "jenkins"
+    container_name: "jenkins"
+
+  jenkins-worker-1:
+    image: {{ project_name }}-jenkins-worker:{{ jenkins_worker_version }}
+    hostname: "jenkins-worker-1"
+    container_name: jenkins-worker-1
+    restart: always
+    depends_on:
+      - jenkins
+    environment:
+      - JENKINS_URL=http://jenkins:8080/jenkins/
+      - JENKINS_AGENT_NAME=jenkins-worker-1
+      - JENKINS_SECRET= {{ jenkins_worker_1_secret }}
+      - HTTP_PROXY=http://{{ https_domain }}
+      - HTTPS_PROXY=http://{{ https_domain }}
+      - NO_PROXY=localhost,127.0.0.1,jenkins
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock 
+
+  postgresql_kclk:
+    image: quay.io/sclorg/postgresql-16-c10s
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgsql_kclk_data:/var/lib/pgsql/data
+    environment:
+      POSTGRESQL_USER: "{{ keycloak_database_user }}"
+      POSTGRESQL_PASSWORD: "{{ keycloak_database_password }}"
+      POSTGRESQL_DATABASE: "{{ keycloak_database_name }}"
+      POSTGRESQL_ADMIN_PASSWORD: "{{ postgresql_keycloak_postgresql_admin_password }}" # SCLORG images often require this
+    hostname: "postgresql_kclk"
+    container_name: "postgresql_kclk"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bn_keycloak"]
+            
+  keycloak:
+    image: quay.io/keycloak/keycloak:{{ keycloak_version }}
+    container_name: "keycloak"
+    hostname: "keycloak"
+    environment:
+      KC_DB_USERNAME: "{{ keycloak_database_user }}"
+      KC_DB_PASSWORD: "{{ keycloak_database_password }}"
+      KC_DB: postgres
+      KC_DB_URL: "jdbc:postgresql://postgresql_kclk:5432/{{ keycloak_database_name }}"
+      KC_CACHE: local
+#      KC_BOOTSTRAP_ADMIN_USERNAME: "admin"
+#      KC_BOOTSTRAP_ADMIN_PASSWORD: "admin"
+    command: "start --proxy-headers xforwarded --http-enabled true --hostname {{ https_domain }}"
+#    command: start-dev
+    ports:
+      - "8080:8080"
+    depends_on:
+      - "postgresql_kclk"
+
+networks:
+  default:
+    name: {{ project_name }}_default
+    driver: bridge
+
+volumes:
+  jenkins_data:
+    driver: local
+  pgsql_kclk_data:
+    driver: local

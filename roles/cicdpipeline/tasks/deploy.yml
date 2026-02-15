@@ -1,0 +1,11 @@
+- name: Create docker service
+  import_playbook: create_docker_service.yml
+
+- name: Create jenkins image
+  import_playbook: create_jenkins_image.yml
+
+- name: Create jenkins worker image
+  import_playbook: create_jenkins_worker_image.yml
+
+- name: Create nginx image
+  import_playbook: create_nginx_image.yml

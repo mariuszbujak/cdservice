@@ -1,0 +1,49 @@
+---
+- hosts: test
+  gather_facts: false
+  vars:
+    ansible_user: "{{ lookup('ansible.builtin.config', 'DEFAULT_REMOTE_USER') }}"
+    docker_network: "{{ project_name }}_default"
+    project_dir: "/tmp/{{ ansible_user }}/{{ project_name }}"
+    docker_compose_src: ../templates/compose.yml.j2
+  vars_files:
+    - ../vars/secrets.yml
+    - ../vars/main.yml
+
+  tasks:
+  - name: Check if Docker Compose is installed
+    command: docker compose --version
+    register: docker_compose_installed
+    failed_when: docker_compose_installed.rc != 0
+    changed_when: false
+
+  - assert:
+      that: docker_compose_installed.rc == 0
+  
+  - name: Set up Docker Compose environment variables
+    set_fact:
+      docker_compose_env:
+        Postgresql_keycloak_postgresql_user:  "{{ postgresql_keycloak_postgresql_user }}"
+        Postgresql_keycloak_postgresql_database: "{{ postgresql_keycloak_postgresql_database }}"
+        Postgresql_keycloak_postgresql_password: "{{ postgresql_keycloak_postgresql_password }}"
+        Keycloak_database_user: "{{ keycloak_database_user }}"
+        Keycloak_database_name: "{{ keycloak_database_name }}" 
+        Keycloak_database_password: "{{ keycloak_database_password }}"
+        Keycloak_admin: "{{ keycloak_admin }}" 
+        Keycloak_admin_password: "{{ keycloak_admin_password }}"
+
+  - name: Run docker-compose down
+    community.docker.docker_compose_v2:
+      project_name: "{{ project_name }}"
+      state: absent # or 'present'
+      definition: "{{ lookup('template', docker_compose_src ) | from_yaml }}"
+
+  - name: "get network info"
+    community.docker.docker_network_info:
+      name: "{{ docker_network }}"
+    register: net_info
+
+  - name: "check availability of network"
+    assert: 
+      that: net_info.network is none
+      fail_msg: "Docker network '{{ docker_network }}' not found."

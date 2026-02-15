@@ -1,0 +1,96 @@
+#!/bin/bash
+set -e
+
+PASSWORD="{{ ssl_client_p12_password }}"
+DOMAIN="{{ https_domain }}"
+VAULT_FILE="certs.yml"
+VAULT_PASS_FILE="/tmp/.vpass" 
+P12_ALIAS="{{ ssl_client_p12_alias }}"
+
+echo "1. Generating CA and Client CSR..."
+
+WORK_DIR=$(mktemp -d -t ca-setup-XXXXXXXX)
+
+# Ensure it's deleted when the script exits (even if it crashes)
+trap 'rm -rf "$WORK_DIR"' EXIT
+
+# Move into the workspace
+cd "$WORK_DIR" || exit 1
+
+echo "Currently working in: $(pwd)"
+
+openssl genrsa -out ca.key 4096
+openssl req -x509 -new -nodes -key ca.key -sha256 -days 3650 -subj "/CN=MyCA" -out ca.crt
+openssl genrsa -out client.key 2048
+openssl req -new -key client.key -subj "/CN=$DOMAIN" -out client.csr
+
+echo "2. Creating the extension file with an explicit section header..."
+# We name the section [ v3_client ]
+cat > client.ext << EOF
+[ v3_client ]
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, keyEncipherment
+subjectAltName = DNS:$DOMAIN, DNS:*.$DOMAIN
+EOF
+
+echo "3. Signing with explicit section reference..."
+# Note the -extensions v3_client at the end
+openssl x509 -req -in client.csr -CA ca.crt -CAkey ca.key \
+    -CAcreateserial -out client.crt -days 825 -sha256 \
+    -extfile client.ext -extensions v3_client
+
+echo "4. Packaging to P12..."
+openssl pkcs12 -export -out client.p12 \
+    -inkey client.key -in client.crt \
+    -certfile ca.crt \
+    -name "$P12_ALIAS" \
+    -passout pass:$PASSWORD
+
+echo "Creating YAML structure for Ansible Vault..."
+
+# Create the YAML content
+# We use 'sed' to indent the certificates so they work as YAML block scalars (|)
+cat << EOF > certs_unencrypted.yml
+---
+# Certificate Authority Files
+ca_crt: |
+$(sed 's/^/  /' ca.crt)
+
+ca_key: |
+$(sed 's/^/  /' ca.key)
+
+ca_srl: "$(cat ca.srl)"
+
+# Client Certificate Files
+client_crt: |
+$(sed 's/^/  /' client.crt)
+
+client_key: |
+$(sed 's/^/  /' client.key)
+
+client_csr: |
+$(sed 's/^/  /' client.csr)
+
+client_ext: |
+$(sed 's/^/  /' client.ext)
+
+# Binary P12 (if generated) converted to Base64
+client_p12_b64: "$(base64 -w 0 client.p12 2>/dev/null || echo 'not_generated')"
+EOF
+
+echo "Encrypting into $VAULT_FILE..."
+
+# Encrypt the file
+# If you don't use a password file, remove '--vault-password-file $VAULT_PASS_FILE'
+ansible-vault encrypt certs_unencrypted.yml \
+    --vault-password-file "$VAULT_PASS_FILE" \
+    --output "$VAULT_FILE"
+
+# Clean up the unencrypted temporary file
+rm certs_unencrypted.yml
+
+echo "Success: $VAULT_FILE created and encrypted."
+
+cp "$VAULT_FILE" /tmp/certs.yml
+cp client.p12 /tmp/client.p12

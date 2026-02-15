@@ -1,0 +1,75 @@
+# STAGE 1: Compilation (The Builder)
+FROM ubuntu:{{ ubuntu_version }} AS builder
+
+# Install build dependencies 
+RUN apt-get update && apt-get install -y \
+  build-essential libpcre3-dev zlib1g-dev openssl libssl-dev wget tar 
+
+# Download sources using your variables
+RUN wget http://nginx.org/download/nginx-{{ nginx_version }}.tar.gz && \
+    wget https://www.openssl.org/source/openssl-{{ openssl_version }}.tar.gz && \
+    wget https://sourceforge.net/projects/pcre/files/pcre/{{ pcre_version }}/pcre-{{ pcre_version }}.tar.gz/download -O pcre-{{ pcre_version }}.tar.gz && \
+    wget https://zlib.net/zlib-{{ zlib_version }}.tar.gz
+
+RUN tar -xzf nginx-{{ nginx_version }}.tar.gz && \
+    tar -xzf openssl-{{ openssl_version }}.tar.gz && \
+    tar -xzf pcre-{{ pcre_version }}.tar.gz && \
+    tar -xzf zlib-{{ zlib_version }}.tar.gz
+
+# Compile PCRE, Zlib, and OpenSSL as you defined [cite: 2]
+RUN cd pcre-{{ pcre_version }} && \
+    ./configure --prefix=/usr/local && \
+    make && \
+    make install && \
+    cd ..
+
+RUN cd zlib-{{ zlib_version }} && \
+    ./configure --prefix=/usr/local && \
+    make && \
+    make install && \
+    cd ..
+
+RUN cd openssl-{{ openssl_version }} && \
+    ./config --prefix=/usr/local --openssldir=/usr/local/openssl shared && \
+    make && \
+    make install && \
+    cd ..
+
+# Compile Nginx
+RUN cd nginx-{{ nginx_version }} && \
+    ./configure \
+	  --prefix=/usr/local/nginx \
+	  --with-http_ssl_module \
+	  --with-http_v2_module \
+	  --with-pcre=/pcre-{{ pcre_version }} \
+	  --with-zlib=/zlib-{{ zlib_version }} \
+	  --with-openssl=/openssl-{{ openssl_version }} \
+	  --with-stream \
+	  --with-stream_ssl_module && \
+    make && make install 
+
+# STAGE 2: Production (The Lean Runtime)
+FROM ubuntu:24.04
+
+# Install only runtime essentials (no build-essential)
+RUN apt-get update && apt-get install -y libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*
+
+# Copy ONLY the compiled binaries from the builder stage
+COPY --from=builder /usr/local/nginx /usr/local/nginx
+COPY --from=builder /usr/local/lib /usr/local/lib
+
+# Update shared library cache
+RUN ldconfig
+
+# Set up symlinks and ports
+RUN ln -s /usr/local/nginx/sbin/nginx /usr/local/bin/nginx
+EXPOSE 80 443
+
+# Copy configurations 
+COPY ./nginx.conf /usr/local/nginx/conf/nginx.conf          
+COPY ./default.conf /usr/local/nginx/conf/default.conf
+COPY ./page-not-found.html /usr/local/nginx/html/page-not-found.html
+COPY ./includes/ /usr/local/nginx/includes/
+COPY ./ssl/ /usr/local/nginx/ssl/
+
+CMD ["nginx", "-g", "daemon off;"]

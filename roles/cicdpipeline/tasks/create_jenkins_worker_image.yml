@@ -1,0 +1,38 @@
+- name: Build Jenkins Docker Image and Start Worker Service
+  hosts: test
+  become: true
+  vars:
+    ansible_user: "{{ lookup('ansible.builtin.config', 'DEFAULT_REMOTE_USER') }}"
+    jenkins_worker_src_dir: "/tmp/{{ ansible_user }}/{{ project_name }}/jenkins-worker/"
+    docker_image_name: "{{ project_name }}-jenkins-worker:{{ jenkins_worker_version }}"
+    docker_image_tag: "{{ jenkins_worker_version }}"
+  vars_files:
+    - "../vars/secrets.yml"
+    - "../vars/main.yml"
+  tasks:
+    - name: Ensure host install directory exists
+      ansible.builtin.file:
+        path: "{{ jenkins_worker_src_dir }}"
+        state: directory
+        mode: '0755'
+      become_user: "{{ ansible_user }}"
+
+    - name: Create Dockerfile
+      template:
+        src: ../templates/jenkins-worker-1-Dockerfile.j2
+        dest: "{{ jenkins_worker_src_dir }}/Dockerfile"
+      become_user: "{{ ansible_user }}"
+
+    - name: Build jenkins worker "{{ jenkins_worker_version }}" Image
+      community.docker.docker_image:
+        name: "{{ docker_image_name }}"
+        tag: "{{ docker_image_tag }}"
+        build:
+          path: "{{ jenkins_worker_src_dir }}"
+          dockerfile: Dockerfile
+        source: build
+
+    - name: Removal of Jenkins Worker source folder
+      ansible.builtin.file:
+        path: "{{ jenkins_worker_src_dir }}"
+        state: absent

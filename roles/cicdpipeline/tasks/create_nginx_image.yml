@@ -1,0 +1,86 @@
+---
+- name: Build Docker Image with Nginx from Source
+  hosts: test
+
+  vars:
+    ansible_user: "{{ lookup('ansible.builtin.config', 'DEFAULT_REMOTE_USER') }}"
+    nginx_build_dir: "/tmp/{{ ansible_user }}/{{ project_name }}/nginx/"
+    nginx_install_dir: "/usr/local/nginx"
+    docker_image_name: "{{ project_name }}-proxy"
+    docker_image_tag: "{{ nginx_version }}"
+  vars_files:
+    - "../vars/certs.yml"
+    - "../vars/main.yml"
+
+  tasks:
+    - name: Ensure host install directory exists
+      ansible.builtin.file:
+        path: "{{ nginx_build_dir }}"
+        state: directory
+        mode: '0755'
+      become_user: "{{ ansible_user }}"
+
+    - name: Nginx folder copy
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: "{{ nginx_build_dir }}"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0640'  
+      loop:
+        - ../templates/nginx/nginx.conf
+        - ../templates/nginx/page-not-found.html
+        - ../templates/nginx/includes
+
+    - name: Nginx default.conf creation from template
+      ansible.builtin.template:
+        src: "../templates/nginx/default.conf.j2"
+        dest: "{{ nginx_build_dir }}/default.conf"
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0640'  
+
+    - name: Create ssl folder
+      ansible.builtin.file:
+        path: "{{ nginx_build_dir }}ssl/"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0750'
+
+    - name: Load certificate variables
+      include_vars:
+        file: ../vars/certs.yml
+        name: all_certs
+
+    - name: Deploy all certificates and keys
+      copy:
+        content: "{{ item.value }}"
+        dest: "{{ nginx_build_dir }}ssl/{{ item.key | replace('_', '.') }}"
+        mode: "{{ '0600' if 'key' in item.key else '0644' }}"
+      loop: "{{ all_certs | dict2items }}"
+      when: item.value is not none
+      loop_control:
+        label: "{{ item.key }}"
+    
+    - name: Create Dockerfile
+      template:
+        src: ../templates/nginx-Dockerfile.j2
+        dest: "{{ nginx_build_dir }}/Dockerfile"
+      become_user: "{{ ansible_user }}"
+
+    - name: Build Docker image
+      docker_image:
+        name: "{{ docker_image_name }}"
+        tag: "{{ docker_image_tag }}"
+        build:
+          path: "{{ nginx_build_dir }}"
+          dockerfile: Dockerfile
+        source: build
+        state: present
+      become: true
+
+    - name: Removal of nginx source folder
+      ansible.builtin.file:
+        path: "{{ nginx_build_dir }}"
+        state: absent
