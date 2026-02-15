@@ -27,6 +27,7 @@ Dependencies
 
 Tested on the following version of software:
 
+- ansible_version: 2.20.3
 - jenkins_version: stable-2.528
 - jenkins_worker_version: "latest"
 - nginx_version: "1.25.5"
