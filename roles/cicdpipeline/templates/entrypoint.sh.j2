@@ -1,0 +1,40 @@
+#!/bin/bash
+set -e
+
+# Path to a temporary Unix socket to keep the "bootstrap" start private
+SOCKET_DIR="/tmp/pg_socket"
+mkdir -p "$SOCKET_DIR"
+chown postgres:postgres "$SOCKET_DIR"
+
+if [ -z "$(ls -A "$PGDATA")" ]; then
+    echo "Initializing empty directory..."
+    initdb -D "$PGDATA"
+
+    # 1. Start Postgres in the background (pointing to our private socket)
+    # This avoids opening port 5432 to the network while we have no password
+    pg_ctl -D "$PGDATA" \
+           -o "-c listen_addresses='' -c unix_socket_directories='$SOCKET_DIR'" \
+           -w start
+
+    echo "Creating user and database..."
+    # 2. Run the SQL commands using the local socket
+    psql -h "$SOCKET_DIR" -U postgres <<-EOSQL
+        CREATE USER ${DB_USER:-"{{ keycloak_database_user }}"} WITH PASSWORD '${DB_PASSWORD:-"{{ keycloak_database_password }}"}';
+        CREATE DATABASE ${DB_NAME:-"{{ keycloak_database_name }}"};
+        GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME:-"{{ keycloak_database_name }}"} TO ${DB_USER:-"{{ keycloak_database_user }}"};
+
+        \c ${DB_NAME:-"{{ keycloak_database_name }}"};
+        GRANT USAGE ON SCHEMA public TO ${DB_USER:-"{{ keycloak_database_user }}"};
+        GRANT CREATE ON SCHEMA public TO ${DB_USER:-"{{ keycloak_database_user }}"};
+EOSQL
+
+    # 3. Stop the background instance
+    pg_ctl -D "$PGDATA" -m fast -w stop
+    
+    # 4. Final configuration for public access
+    echo "listen_addresses='*'" >> "$PGDATA/postgresql.conf"
+    echo "host all all 172.0.0.0/8 md5" >> "$PGDATA/pg_hba.conf"
+fi
+
+echo "Starting PostgreSQL..."
+exec "$@"

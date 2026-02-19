@@ -1,0 +1,55 @@
+FROM ubuntu:{{ ubuntu_version }} AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PG_VERSION={{ postgres_version }}
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libreadline-dev \
+    zlib1g-dev \
+    libssl-dev \
+    curl \
+    bison \
+    flex \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fSL "https://ftp.postgresql.org/pub/source/v$PG_VERSION/postgresql-$PG_VERSION.tar.gz" -o postgresql.tar.gz \
+    && tar -xzf postgresql.tar.gz \
+    && cd postgresql-$PG_VERSION \
+    && ./configure \
+        --prefix=/usr/local/pgsql \
+        --with-openssl \
+        --without-icu \ 
+    && make -j $(nproc) \
+    && make install
+
+FROM ubuntu:{{ ubuntu_version }}
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y \
+    libreadline8 \
+    libssl3 \
+    zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /usr/local/pgsql /usr/local/pgsql
+
+ENV PATH="/usr/local/pgsql/bin:$PATH"
+ENV PGDATA="/var/lib/postgresql/data"
+
+RUN groupadd -r postgres && useradd -r -g postgres postgres \
+    && mkdir -p "$PGDATA" && chown -R postgres:postgres "$PGDATA"
+
+COPY entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+ENTRYPOINT ["entrypoint.sh"]
+
+USER postgres
+
+WORKDIR /var/lib/postgresql
+
+EXPOSE 5432
+CMD ["postgres", "-D", "/var/lib/postgresql/data"]

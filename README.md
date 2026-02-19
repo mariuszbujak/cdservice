@@ -53,15 +53,15 @@ The certificates will be available using command:
 
 Deployment of docker services:
 
->	ansible-playbook roles/cicdpipeline/tasks/deploy.yml -J -K
+>	ansible-playbook roles/cicdpipeline/tasks/deploy.yml -e "target_hosts=<your target hosts>" -J -K
 
 Start of the services:
 
->	ansible-playbook roles/cicdpipeline/tasks/services_network_up.yml -J -K
+>	ansible-playbook roles/cicdpipeline/tasks/services_network_up.yml -e "target_hosts=<your target hosts>" -J -K
 
 Stop of the services:
 
->	ansible-playbook roles/cicdpipeline/tasks/services_network_down.yml -J -K
+>	ansible-playbook roles/cicdpipeline/tasks/services_network_down.yml -e "target_hosts=<your target hosts>" -J -K
 
 License
 -------

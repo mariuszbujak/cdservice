@@ -15,6 +15,8 @@ services:
     ports:
       - "8081:8080"
       - "50000:50000"
+    environment:
+      - JENKINS_OPTS="--prefix=/jenkins
     volumes:
       - jenkins_data:/var/jenkins_home
     hostname: "jenkins"
@@ -34,25 +36,10 @@ services:
       - HTTP_PROXY=http://{{ https_domain }}
       - HTTPS_PROXY=http://{{ https_domain }}
       - NO_PROXY=localhost,127.0.0.1,jenkins
+      - JENKINS_WEB_SOCKET=true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock 
 
-  postgresql_kclk:
-    image: quay.io/sclorg/postgresql-16-c10s
-    ports:
-      - "5433:5432"
-    volumes:
-      - pgsql_kclk_data:/var/lib/pgsql/data
-    environment:
-      POSTGRESQL_USER: "{{ keycloak_database_user }}"
-      POSTGRESQL_PASSWORD: "{{ keycloak_database_password }}"
-      POSTGRESQL_DATABASE: "{{ keycloak_database_name }}"
-      POSTGRESQL_ADMIN_PASSWORD: "{{ postgresql_keycloak_postgresql_admin_password }}" # SCLORG images often require this
-    hostname: "postgresql_kclk"
-    container_name: "postgresql_kclk"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bn_keycloak"]
-            
   keycloak:
     image: quay.io/keycloak/keycloak:{{ keycloak_version }}
     container_name: "keycloak"
@@ -61,7 +48,7 @@ services:
       KC_DB_USERNAME: "{{ keycloak_database_user }}"
       KC_DB_PASSWORD: "{{ keycloak_database_password }}"
       KC_DB: postgres
-      KC_DB_URL: "jdbc:postgresql://postgresql_kclk:5432/{{ keycloak_database_name }}"
+      KC_DB_URL: "jdbc:postgresql://postgres:5432/{{ keycloak_database_name }}"
       KC_CACHE: local
 #      KC_BOOTSTRAP_ADMIN_USERNAME: "admin"
 #      KC_BOOTSTRAP_ADMIN_PASSWORD: "admin"
@@ -70,7 +57,20 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - "postgresql_kclk"
+      - "postgres"
+
+  postgres:
+    image: {{ project_name }}-postgresql:{{ postgres_version }}
+    environment:
+      - PGDATA=/var/lib/postgresql/data
+      - POSTGRES_DB=postgres
+    volumes:
+      - postgres_storage:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: always
+    hostname: "postgres"
+    container_name: "postgres"
 
 networks:
   default:
@@ -80,5 +80,5 @@ networks:
 volumes:
   jenkins_data:
     driver: local
-  pgsql_kclk_data:
+  postgres_storage:
     driver: local

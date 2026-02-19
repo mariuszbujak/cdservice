@@ -1,5 +1,5 @@
 - name: Install and Configure Docker
-  hosts: test
+  hosts: "{{ target_hosts | default('none') }}"
   become: yes
   tasks:
     - name: Install dnf-plugins-core (to manage repos)

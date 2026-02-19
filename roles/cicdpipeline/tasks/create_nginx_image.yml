@@ -1,6 +1,6 @@
 ---
 - name: Build Docker Image with Nginx from Source
-  hosts: test
+  hosts: "{{ target_hosts | default('none') }}"
 
   vars:
     ansible_user: "{{ lookup('ansible.builtin.config', 'DEFAULT_REMOTE_USER') }}"

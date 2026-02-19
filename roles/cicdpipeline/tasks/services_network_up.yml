@@ -1,5 +1,5 @@
 ---
-- hosts: test
+- hosts: "{{ target_hosts | default('none') }}"
   gather_facts: false
   become: true
   vars:
@@ -24,9 +24,6 @@
   - name: Set up Docker Compose environment variables
     set_fact:
       docker_compose_env:
-        Postgresql_keycloak_postgresql_user:  "{{ postgresql_keycloak_postgresql_user }}"
-        Postgresql_keycloak_postgresql_database: "{{ postgresql_keycloak_postgresql_database }}"
-        Postgresql_keycloak_postgresql_password: "{{ postgresql_keycloak_postgresql_password }}"
         Keycloak_database_user: "{{ keycloak_database_user }}"
         Keycloak_database_name: "{{ keycloak_database_name }}" 
         Keycloak_database_password: "{{ keycloak_database_password }}"

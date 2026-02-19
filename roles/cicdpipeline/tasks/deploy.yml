@@ -9,3 +9,6 @@
 
 - name: Create nginx image
   import_playbook: create_nginx_image.yml
+
+- name: Create postgres image
+  import_playbook: create_postgresql_image.yml
