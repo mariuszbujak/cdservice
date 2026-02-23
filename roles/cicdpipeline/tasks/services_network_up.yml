@@ -27,8 +27,6 @@
         Keycloak_database_user: "{{ keycloak_database_user }}"
         Keycloak_database_name: "{{ keycloak_database_name }}" 
         Keycloak_database_password: "{{ keycloak_database_password }}"
-        Keycloak_admin: "{{ keycloak_admin }}" 
-        Keycloak_admin_password: "{{ keycloak_admin_password }}"
 
   - name: Run docker-compose up
     community.docker.docker_compose_v2:

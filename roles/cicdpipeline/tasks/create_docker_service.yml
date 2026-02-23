@@ -1,26 +1,53 @@
 - name: Install and Configure Docker
   hosts: "{{ target_hosts | default('none') }}"
+  gather_facts: yes
   become: yes
   tasks:
-    - name: Install dnf-plugins-core (to manage repos)
-      ansible.builtin.dnf:
-        name: dnf-plugins-core
-        state: present
+    - name: Install Docker on Ubuntu
+      block:
+        - name: Add Docker GPG apt Key
+          ansible.builtin.apt_key:
+            url: https://download.docker.com/linux/ubuntu/gpg
+            state: present
 
-    - name: Add Docker CE repository
-      ansible.builtin.get_url:
-        url: https://download.docker.com/linux/fedora/docker-ce.repo
-        dest: /etc/yum.repos.d/docker-ce.repo
-        mode: '0644'
+        - name: Add Docker Repository
+          ansible.builtin.apt_repository:
+            repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_facts['distribution_release'] }} stable"
+            state: present
 
-    - name: Install Docker and Docker Compose plugin
-      ansible.builtin.dnf:
-        name:
-          - docker-ce
-          - docker-ce-cli
-          - containerd.io
-          - docker-compose-plugin
-        state: present
+        - name: Install Docker and components
+          ansible.builtin.apt:
+            name:
+              - docker-ce
+              - docker-ce-cli
+              - containerd.io
+              - docker-compose-plugin
+            state: present
+            update_cache: yes
+      when: ansible_facts["distribution"] == "Ubuntu"
+
+    - name: Install Docker on Fedora
+      block:
+        - name: Install dnf-plugins-core (to manage repos)
+          ansible.builtin.dnf:
+            name: dnf-plugins-core
+            state: present
+
+        - name: Add Docker CE repository
+          ansible.builtin.get_url:
+            url: https://download.docker.com/linux/fedora/docker-ce.repo
+            dest: /etc/yum.repos.d/docker-ce.repo
+            mode: '0644'
+
+        - name: Install Docker and Docker Compose plugin
+          ansible.builtin.dnf:
+            name:
+              - docker-ce
+              - docker-ce-cli
+              - containerd.io
+              - docker-compose-plugin
+            state: present
+      when: ansible_facts["distribution"] == "Fedora"
 
     - name: Create /etc/docker directory
       ansible.builtin.file:
