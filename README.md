@@ -9,7 +9,7 @@ This is the example of simple Continous Delivery service based on Jenkins with a
 Requirements
 ------------
 
-The playbooks were tested on Fedora Linux 42 stable release
+The playbooks were tested on Fedora Linux 42 stable release and Ubuntu Noble LSB release
 
 Playbooks do not include the configuration of Keycloak, Jenkins which can be done manually from the UI.
 
@@ -33,7 +33,7 @@ Tested on the following version of software:
 - nginx_version: "1.25.5"
 - openssl_version: "1.1.1w"
 - pcre_version: "8.45"
-- zlib_version: "1.3.1"
+- zlib_version: "1.3.2"
 - ubuntu_version: "24.04"
 - keycloak_version: quay.io/keycloak/keycloak:26.3.5
 - maven_version: "3.9-eclipse-temurin-21"
@@ -53,15 +53,15 @@ The certificates will be available using command:
 
 Deployment of docker services:
 
->	ansible-playbook roles/cicdpipeline/tasks/deploy.yml -e "target_hosts=<your target hosts>" -J -K
+>	ansible-playbook roles/cicdpipeline/tasks/deploy.yml -e "target_hosts=test" -J -K
 
 Start of the services:
 
->	ansible-playbook roles/cicdpipeline/tasks/services_network_up.yml -e "target_hosts=<your target hosts>" -J -K
+>	ansible-playbook roles/cicdpipeline/tasks/services_network_up.yml -e "target_hosts=test" -J -K
 
 Stop of the services:
 
->	ansible-playbook roles/cicdpipeline/tasks/services_network_down.yml -e "target_hosts=<your target hosts>" -J -K
+>	ansible-playbook roles/cicdpipeline/tasks/services_network_down.yml -e "target_hosts=test" -J -K
 
 License
 -------
